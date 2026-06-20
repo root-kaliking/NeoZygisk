@@ -9,18 +9,63 @@ on:
   merge_group:
 
 jobs:
+  # ==========================================================================
+  # 1. FORMAT CHECK — clang-format (C++) + rustfmt (Rust)
+  # ==========================================================================
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install clang-format
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang-format
+
+      - name: Check C++ formatting (clang-format)
+        run: |
+          find loader/ -type f \( -name '*.cpp' -o -name '*.hpp' -o -name '*.h' \) \
+            -exec clang-format --dry-run --Werror {} +
+
+      - name: Setup Rust toolchain
+        run: |
+          rustup override set nightly
+          rustup component add rustfmt
+
+      - name: Check Rust formatting (rustfmt)
+        run: cargo fmt --check --manifest-path zygiskd/Cargo.toml
+
+  # ==========================================================================
+  # 2. STATIC ANALYSIS — Rust clippy
+  # ==========================================================================
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        run: |
+          rustup override set nightly
+          rustup component add clippy
+
+      - name: Run clippy
+        run: cargo clippy --manifest-path zygiskd/Cargo.toml -- -D warnings
+
+  # ==========================================================================
+  # 3. BUILD — Compile loader (C++), zygiskd (Rust), package module
+  # ==========================================================================
   build:
     runs-on: ubuntu-latest
+    needs: [format, clippy]
 
     steps:
-      # ====================================================================
-      # 1. SETUP ENVIRONMENT
-      # ====================================================================
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           submodules: "recursive"
-          fetch-depth: 0 # Needed for versioning from git history
+          fetch-depth: 0
 
       - name: Setup Java
         uses: actions/setup-java@v5
@@ -49,15 +94,9 @@ jobs:
         with:
           workspaces: zygiskd/src -> ../build/intermediates/rust
 
-      # ====================================================================
-      # 2. CONFIGURE AND BUILD
-      # ====================================================================
       - name: Build with Gradle
         run: ./gradlew zipRelease zipDebug -Porg.gradle.parallel=true -Porg.gradle.vfs.watch=true -Dorg.gradle.jvmargs=-Xmx2048m
 
-      # ====================================================================
-      # 3. PREPARE AND UPLOAD ARTIFACTS
-      # ====================================================================
       - name: Prepare build artifacts
         if: success()
         id: prepare_artifacts
