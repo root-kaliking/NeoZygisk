@@ -185,6 +185,12 @@ bool inject_on_main(int pid, const char *lib_path) {
 
     // Backup the current registers before we start making remote calls.
     memcpy(&backup, &regs, sizeof(regs));
+
+    // Track the SP before pushing any strings, so we can later zero out the entire
+    // stack region used during injection. This prevents game processes from scanning
+    // their stack and finding suspicious strings like "libzygisk.so" or TMP_PATH.
+    auto stack_watermark = regs.REG_SP;
+
     map = MapInfo::Scan(std::to_string(pid));  // Re-scan maps as they may have changed.
     auto local_map = MapInfo::Scan();
     auto libc_return_addr = find_module_return_addr(map, "libc.so");
@@ -278,6 +284,18 @@ bool inject_on_main(int pid, const char *lib_path) {
     auto remote_tmp_path = push_string(pid, regs, zygiskd::GetTmpPath().c_str());
     args.push_back((long) remote_tmp_path);
     remote_call(pid, regs, injector_entry, (uintptr_t) libc_return_addr, args);
+
+    // --- Cleanup: Zero out the stack region used for injection strings ---
+    // The stack memory below |stack_watermark| contains pushed strings like
+    // "libzygisk.so", "entry", and TMP_PATH. Zeroing these prevents game
+    // processes from scanning their inherited stack for suspicious artifacts.
+    if (stack_watermark > regs.REG_SP) {
+        size_t stack_used = stack_watermark - regs.REG_SP;
+        std::vector<char> zeros(stack_used, 0);
+        LOGV("zeroing %zu bytes of stack region [0x%lx, 0x%lx) used during injection",
+             stack_used, (unsigned long) regs.REG_SP, (unsigned long) stack_watermark);
+        write_proc(pid, regs.REG_SP, zeros.data(), stack_used);
+    }
 
     // --- Step 5: Restore State ---
     // Set the instruction pointer back to the original entry address and restore all registers.

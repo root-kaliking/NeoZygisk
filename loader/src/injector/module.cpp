@@ -323,7 +323,7 @@ void ZygiskContext::run_modules_post() {
     if (modules.size() > 0) {
         LOGV("modules unloaded: %zu/%zu", modules_unloaded, modules.size());
         if (modules.size() == modules_unloaded) clean_libc_trace();
-        clean_linker_trace("jit-cache-zygisk", modules.size(), modules_unloaded, true);
+        clean_linker_trace("jit-cache", modules.size(), modules_unloaded, true);
         g_hook->should_spoof_maps =
             (flags & APP_SPECIALIZE) && (modules.size() - modules_unloaded) > 0;
     }
@@ -359,6 +359,14 @@ void ZygiskContext::app_specialize_pre() {
     if ((info_flags & UNMOUNT_MASK) == UNMOUNT_MASK) {
         LOGI("[%s] is on the denylist", process);
         flags |= DO_REVERT_UNMOUNT;
+    }
+
+    // Strip root implementation identity bits from info_flags for non-manager
+    // app processes. These bits (PROCESS_ROOT_IS_APATCH/KSU/MAGISK) are only
+    // needed during zygote-level unmount operations and should not leak into
+    // the game process's memory where they become detectable via self-inspection.
+    if (!(info_flags & PROCESS_IS_MANAGER)) {
+        info_flags &= ~(PROCESS_ROOT_IS_APATCH | PROCESS_ROOT_IS_KSU | PROCESS_ROOT_IS_MAGISK);
     }
 
     flags |= APP_SPECIALIZE;

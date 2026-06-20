@@ -161,6 +161,15 @@ DCL_HOOK_FUNC(static int, pthread_attr_setstacksize, void *target, size_t size) 
             }
 
             delete g_hook;
+
+            // Before unmapping, render the pages inaccessible and discard their
+            // contents. This prevents game processes from finding residual code
+            // or data in the address space, even if the unmap is delayed by the
+            // kernel. Using PROT_NONE + MADV_DONTNEED ensures the pages present
+            // as zero-filled, unreadable holes in the process's memory map.
+            mprotect(start_addr, block_size, PROT_NONE);
+            madvise(start_addr, block_size, MADV_DONTNEED);
+
             // Because both `pthread_attr_setstacksize` and `munmap` have the same function
             // signature, we can use `musttail` to let the compiler reuse our stack frame and thus
             // `munmap` will directly return to the caller of `pthread_attr_setstacksize`.
