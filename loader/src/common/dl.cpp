@@ -15,7 +15,7 @@
  * @return A handle to the opened library on success, or nullptr on failure.
  */
 void* DlopenMem(int fd, int flags) {
-    constexpr const char* JIT_CACHE_NAME = "/jit-cache-zygisk";
+    constexpr const char* JIT_CACHE_NAME = "/jit-cache";
 
     android_dlextinfo info{.flags = ANDROID_DLEXT_USE_LIBRARY_FD,
                            .reserved_addr = nullptr,

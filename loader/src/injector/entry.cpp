@@ -8,7 +8,7 @@ using namespace std;
 
 extern "C" [[gnu::visibility("default")]]
 void entry(void* addr, size_t size, const char* path) {
-    LOGI("zygisk library injected, version %s", ZKSU_VERSION);
+    LOGV("zygisk library injected, version %s", ZKSU_VERSION);
 
     zygiskd::Init(path);
 
